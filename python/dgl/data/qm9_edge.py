@@ -184,22 +184,20 @@ class QM9EdgeDataset(DGLDataset):
         )
 
     def download(self):
-        if not os.path.exists(self.npz_path):
-            download(self._url, path=self.npz_path)
+        file_path = f"{self.raw_dir}/qm9_edge.npz"
+        if not os.path.exists(file_path):
+            download(self._url, path=file_path)
 
     def process(self):
         self.load()
 
-    @property
-    def npz_path(self):
-        return f"{self.raw_dir}/qm9_edge.npz"
-
     def has_cache(self):
-        return os.path.exists(self.npz_path)
+        npz_path = f"{self.raw_dir}/qm9_edge.npz"
+        return os.path.exists(npz_path)
 
     def save(self):
         np.savez_compressed(
-            self.npz_path,
+            f"{self.raw_dir}/qm9_edge.npz",
             n_node=self.n_node,
             n_edge=self.n_edge,
             node_attr=self.node_attr,
@@ -211,7 +209,8 @@ class QM9EdgeDataset(DGLDataset):
         )
 
     def load(self):
-        data_dict = np.load(self.npz_path, allow_pickle=True)
+        npz_path = f"{self.raw_dir}/qm9_edge.npz"
+        data_dict = np.load(npz_path, allow_pickle=True)
 
         self.n_node = data_dict["n_node"]
         self.n_edge = data_dict["n_edge"]

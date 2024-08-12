@@ -26,20 +26,9 @@ def train_test_split_by_time(df, timestamp, user):
             df.iloc[-2, -2] = True
         return df
 
-    meta_df = {
-        "user_id": np.int64,
-        "movie_id": np.int64,
-        "rating": np.int64,
-        "timestamp": np.int64,
-        "user_id": np.int64,
-        "train_mask": bool,
-        "val_mask": bool,
-        "test_mask": bool,
-    }
-
     df = (
         df.groupby(user, group_keys=False)
-        .apply(train_test_split, meta=meta_df)
+        .apply(train_test_split)
         .compute(scheduler="processes")
         .sort_index()
     )

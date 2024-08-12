@@ -211,29 +211,27 @@ class CitationGraphDataset(DGLBuiltinDataset):
                 )
             )
 
-    @property
-    def graph_path(self):
-        return os.path.join(self.save_path, self.save_name + ".bin")
-
-    @property
-    def info_path(self):
-        return os.path.join(self.save_path, self.save_name + ".pkl")
-
     def has_cache(self):
-        if os.path.exists(self.graph_path) and os.path.exists(self.info_path):
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
+        info_path = os.path.join(self.save_path, self.save_name + ".pkl")
+        if os.path.exists(graph_path) and os.path.exists(info_path):
             return True
 
         return False
 
     def save(self):
         """save the graph list and the labels"""
-        save_graphs(str(self.graph_path), self._g)
-        save_info(str(self.info_path), {"num_classes": self.num_classes})
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
+        info_path = os.path.join(self.save_path, self.save_name + ".pkl")
+        save_graphs(str(graph_path), self._g)
+        save_info(str(info_path), {"num_classes": self.num_classes})
 
     def load(self):
-        graphs, _ = load_graphs(str(self.graph_path))
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
+        info_path = os.path.join(self.save_path, self.save_name + ".pkl")
+        graphs, _ = load_graphs(str(graph_path))
 
-        info = load_info(str(self.info_path))
+        info = load_info(str(info_path))
         graph = graphs[0]
         self._g = graph
         # for compatability
@@ -312,7 +310,11 @@ class CitationGraphDataset(DGLBuiltinDataset):
 
 def _preprocess_features(features):
     """Row-normalize feature matrix and convert to tuple representation"""
-    features = _normalize(features)
+    rowsum = np.asarray(features.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.0
+    r_mat_inv = sp.diags(r_inv)
+    features = r_mat_inv.dot(features)
     return np.asarray(features.todense())
 
 
@@ -856,27 +858,26 @@ class CoraBinary(DGLBuiltinDataset):
         assert len(self.graphs) == len(self.pmpds)
         assert len(self.graphs) == len(self.labels)
 
-    @property
-    def graph_path(self):
-        return os.path.join(self.save_path, self.save_name + ".bin")
-
     def has_cache(self):
-        if os.path.exists(self.graph_path):
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
+        if os.path.exists(graph_path):
             return True
 
         return False
 
     def save(self):
         """save the graph list and the labels"""
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
         labels = {}
         for i, label in enumerate(self.labels):
             labels["{}".format(i)] = F.tensor(label)
-        save_graphs(str(self.graph_path), self.graphs, labels)
+        save_graphs(str(graph_path), self.graphs, labels)
         if self.verbose:
             print("Done saving data into cached files.")
 
     def load(self):
-        self.graphs, labels = load_graphs(str(self.graph_path))
+        graph_path = os.path.join(self.save_path, self.save_name + ".bin")
+        self.graphs, labels = load_graphs(str(graph_path))
 
         self.labels = []
         for i in range(len(labels)):
@@ -928,12 +929,11 @@ class CoraBinary(DGLBuiltinDataset):
 def _normalize(mx):
     """Row-normalize sparse matrix"""
     rowsum = np.asarray(mx.sum(1))
-    mask = np.equal(rowsum, 0.0).flatten()
-    rowsum[mask] = np.nan
     r_inv = np.power(rowsum, -1).flatten()
-    r_inv[mask] = 0.0
+    r_inv[np.isinf(r_inv)] = 0.0
     r_mat_inv = sp.diags(r_inv)
-    return r_mat_inv.dot(mx)
+    mx = r_mat_inv.dot(mx)
+    return mx
 
 
 def _encode_onehot(labels):

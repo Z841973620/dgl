@@ -7,13 +7,7 @@ if [ $# -ne 1 ]; then
     exit -1
 fi
 
-# Build for testing.
-CMAKE_VARS="-DBUILD_TYPE=test"
-
-if [[ $1 != "cpu" ]]; then
-    CMAKE_VARS="$CMAKE_VARS -DUSE_CUDA=ON"
-fi
-
+CMAKE_VARS="-DBUILD_CPP_TEST=ON -DUSE_OPENMP=ON"
 # This is a semicolon-separated list of Python interpreters containing PyTorch.
 # The value here is for CI.  Replace it with your own or comment this whole
 # statement for default Python interpreter.
@@ -21,10 +15,14 @@ if [ "$1" != "cugraph" ]; then
     # We do not build pytorch for cugraph because currently building
     # pytorch against all the supported cugraph versions is not supported
     # See issue: https://github.com/rapidsai/cudf/issues/8510
-    CMAKE_VARS="$CMAKE_VARS -DTORCH_PYTHON_INTERPS=/opt/conda/envs/pytorch-ci/bin/python"
+    CMAKE_VARS="$CMAKE_VARS -DBUILD_TORCH=ON -DTORCH_PYTHON_INTERPS=/opt/conda/envs/pytorch-ci/bin/python"
 else
     # Disable sparse build as cugraph docker image lacks cuDNN.
     CMAKE_VARS="$CMAKE_VARS -DBUILD_TORCH=OFF -DBUILD_SPARSE=OFF"
+fi
+
+if [[ $1 != "cpu" ]]; then
+    CMAKE_VARS="-DUSE_CUDA=ON $CMAKE_VARS"
 fi
 
 if [ -d build ]; then

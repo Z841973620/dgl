@@ -86,17 +86,17 @@ class PATTERNDataset(DGLBuiltinDataset):
     def process(self):
         self.load()
 
-    @property
-    def graph_path(self):
-        return os.path.join(
+    def has_cache(self):
+        graph_path = os.path.join(
             self.save_path, "SBM_PATTERN_{}.bin".format(self.mode)
         )
-
-    def has_cache(self):
-        return os.path.exists(self.graph_path)
+        return os.path.exists(graph_path)
 
     def load(self):
-        self._graphs, _ = load_graphs(self.graph_path)
+        graph_path = os.path.join(
+            self.save_path, "SBM_PATTERN_{}.bin".format(self.mode)
+        )
+        self._graphs, _ = load_graphs(graph_path)
 
     @property
     def num_classes(self):

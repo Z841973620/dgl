@@ -103,16 +103,14 @@ class GDELTDataset(DGLBuiltinDataset):
         self._start_time = self.time_index.min()
         self._end_time = self.time_index.max()
 
-    @property
-    def info_path(self):
-        return os.path.join(self.save_path, self.mode + "_info.pkl")
-
     def has_cache(self):
-        return os.path.exists(self.info_path)
+        info_path = os.path.join(self.save_path, self.mode + "_info.pkl")
+        return os.path.exists(info_path)
 
     def save(self):
+        info_path = os.path.join(self.save_path, self.mode + "_info.pkl")
         save_info(
-            self.info_path,
+            info_path,
             {
                 "data": self.data,
                 "time_index": self.time_index,
@@ -122,7 +120,8 @@ class GDELTDataset(DGLBuiltinDataset):
         )
 
     def load(self):
-        info = load_info(self.info_path)
+        info_path = os.path.join(self.save_path, self.mode + "_info.pkl")
+        info = load_info(info_path)
         self.data, self.time_index, self._start_time, self._end_time = (
             info["data"],
             info["time_index"],

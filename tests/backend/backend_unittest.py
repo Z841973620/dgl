@@ -126,11 +126,6 @@ def abs(a):
     pass
 
 
-def seed(a):
-    """Set seed to for random generator"""
-    pass
-
-
 ###############################################################################
 # Tensor functions used *only* on index tensor
 # ----------------

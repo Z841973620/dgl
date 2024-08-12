@@ -104,7 +104,3 @@ def dot(a, b):
 
 def abs(a):
     return tf.abs(a)
-
-
-def seed(a):
-    return tf.random.set_seed(a)

@@ -9,6 +9,8 @@ and transforming graphs.
 # This initializes Winsock and performs cleanup at termination as required
 import socket
 
+from distutils.version import LooseVersion
+
 # Backend and logging should be imported before other modules.
 from .logging import enable_verbose_logging  # usort: skip
 from .backend import backend_name, load_backend  # usort: skip

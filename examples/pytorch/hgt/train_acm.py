@@ -49,6 +49,7 @@ def get_n_params(model):
 def train(model, G):
     best_val_acc = torch.tensor(0)
     best_test_acc = torch.tensor(0)
+    train_step = torch.tensor(0)
     for epoch in np.arange(args.n_epoch) + 1:
         model.train()
         logits = model(G, "paper")
@@ -58,7 +59,8 @@ def train(model, G):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
         optimizer.step()
-        scheduler.step()
+        train_step += 1
+        scheduler.step(train_step)
         if epoch % 5 == 0:
             model.eval()
             logits = model(G, "paper")

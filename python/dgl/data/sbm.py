@@ -148,32 +148,36 @@ class SBMMixtureDataset(DGLDataset):
         self._line_graph_degrees = [in_degrees(lg) for lg in self._line_graphs]
         self._pm_pds = list(zip(*[g.edges() for g in self._graphs]))[0]
 
-    @property
-    def graph_path(self):
-        return os.path.join(self.save_path, "graphs_{}.bin".format(self.hash))
-
-    @property
-    def line_graph_path(self):
-        return os.path.join(
+    def has_cache(self):
+        graph_path = os.path.join(
+            self.save_path, "graphs_{}.bin".format(self.hash)
+        )
+        line_graph_path = os.path.join(
             self.save_path, "line_graphs_{}.bin".format(self.hash)
         )
-
-    @property
-    def info_path(self):
-        return os.path.join(self.save_path, "info_{}.pkl".format(self.hash))
-
-    def has_cache(self):
+        info_path = os.path.join(
+            self.save_path, "info_{}.pkl".format(self.hash)
+        )
         return (
-            os.path.exists(self.graph_path)
-            and os.path.exists(self.line_graph_path)
-            and os.path.exists(self.info_path)
+            os.path.exists(graph_path)
+            and os.path.exists(line_graph_path)
+            and os.path.exists(info_path)
         )
 
     def save(self):
-        save_graphs(self.graph_path, self._graphs)
-        save_graphs(self.line_graph_path, self._line_graphs)
+        graph_path = os.path.join(
+            self.save_path, "graphs_{}.bin".format(self.hash)
+        )
+        line_graph_path = os.path.join(
+            self.save_path, "line_graphs_{}.bin".format(self.hash)
+        )
+        info_path = os.path.join(
+            self.save_path, "info_{}.pkl".format(self.hash)
+        )
+        save_graphs(graph_path, self._graphs)
+        save_graphs(line_graph_path, self._line_graphs)
         save_info(
-            self.info_path,
+            info_path,
             {
                 "graph_degree": self._graph_degrees,
                 "line_graph_degree": self._line_graph_degrees,
@@ -182,9 +186,18 @@ class SBMMixtureDataset(DGLDataset):
         )
 
     def load(self):
-        self._graphs, _ = load_graphs(self.graph_path)
-        self._line_graphs, _ = load_graphs(self.line_graph_path)
-        info = load_info(self.info_path)
+        graph_path = os.path.join(
+            self.save_path, "graphs_{}.bin".format(self.hash)
+        )
+        line_graph_path = os.path.join(
+            self.save_path, "line_graphs_{}.bin".format(self.hash)
+        )
+        info_path = os.path.join(
+            self.save_path, "info_{}.pkl".format(self.hash)
+        )
+        self._graphs, _ = load_graphs(graph_path)
+        self._line_graphs, _ = load_graphs(line_graph_path)
+        info = load_info(info_path)
         self._graph_degrees = info["graph_degree"]
         self._line_graph_degrees = info["line_graph_degree"]
         self._pm_pds = info["pm_pds"]

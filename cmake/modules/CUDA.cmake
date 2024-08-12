@@ -10,18 +10,22 @@ endif()
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17"   SUPPORT_CXX17)
 
-set(dgl_known_gpu_archs "35" "50" "60" "70" "75")
+set(dgl_known_gpu_archs "35" "37" "50" "52" "60" "61" "70" "75")
 set(dgl_cuda_arch_ptx "70")
 if (CUDA_VERSION_MAJOR GREATER_EQUAL "11")
-  list(APPEND dgl_known_gpu_archs "80" "86")
-  set(dgl_cuda_arch_ptx "80" "86")
+  list(APPEND dgl_known_gpu_archs "80")
+  list(APPEND dgl_known_gpu_archs "86")
+  set(dgl_cuda_arch_ptx "80")
 endif()
-if (CUDA_VERSION VERSION_GREATER_EQUAL "11.8")
+# CMake 3.5 doesn't support VERSION_GREATER_EQUAL
+if (NOT CUDA_VERSION VERSION_LESS "11.8")
+  list(APPEND dgl_known_gpu_archs "89")
   list(APPEND dgl_known_gpu_archs "90")
   set(dgl_cuda_arch_ptx "90")
 endif()
-if (CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
+if (NOT CUDA_VERSION VERSION_LESS "12.0")
   list(REMOVE_ITEM dgl_known_gpu_archs "35")
+  list(REMOVE_ITEM dgl_known_gpu_archs "37")
 endif()
 
 ################################################################################################
@@ -131,11 +135,11 @@ function(dgl_select_nvcc_arch_flags out_variable)
   endif()
 
   if(${CUDA_ARCH_NAME} STREQUAL "Kepler")
-    set(__cuda_arch_bin "35")
-    set(__cuda_arch_ptx "35")
+    set(__cuda_arch_bin "37")
+    set(__cuda_arch_ptx "37")
   elseif(${CUDA_ARCH_NAME} STREQUAL "Maxwell")
-    set(__cuda_arch_bin "50")
-    set(__cuda_arch_ptx "50")
+    set(__cuda_arch_bin "52")
+    set(__cuda_arch_ptx "52")
   elseif(${CUDA_ARCH_NAME} STREQUAL "Pascal")
     set(__cuda_arch_bin "60")
     set(__cuda_arch_ptx "60")
@@ -202,6 +206,59 @@ function(dgl_select_nvcc_arch_flags out_variable)
 endfunction()
 
 ################################################################################################
+# Short command for cuda compilation
+# Usage:
+#   dgl_cuda_compile(<objlist_variable> <cuda_files>)
+macro(dgl_cuda_compile objlist_variable)
+  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+    set(${var}_backup_in_cuda_compile_ "${${var}}")
+
+    # we remove /EHa as it generates warnings under windows
+    string(REPLACE "/EHa" "" ${var} "${${var}}")
+
+  endforeach()
+  if(UNIX OR APPLE)
+    list(APPEND CUDA_NVCC_FLAGS -Xcompiler -fPIC --std=c++17)
+  endif()
+
+  if(APPLE)
+    list(APPEND CUDA_NVCC_FLAGS -Xcompiler -Wno-unused-function)
+  endif()
+
+  set(CUDA_NVCC_FLAGS_DEBUG "${CUDA_NVCC_FLAGS_DEBUG} -G")
+
+  if(MSVC)
+    # disable noisy warnings:
+    # 4819: The file contains a character that cannot be represented in the current code page (number).
+    list(APPEND CUDA_NVCC_FLAGS -Xcompiler "/wd4819")
+    foreach(flag_var
+        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+      if(${flag_var} MATCHES "/MD")
+        string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+      endif(${flag_var} MATCHES "/MD")
+    endforeach(flag_var)
+  endif()
+
+  # If the build system is a container, make sure the nvcc intermediate files
+  # go into the build output area rather than in /tmp, which may run out of space
+  if(IS_CONTAINER_BUILD)
+    set(CUDA_NVCC_INTERMEDIATE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    message(STATUS "Container build enabled, so nvcc intermediate files in: ${CUDA_NVCC_INTERMEDIATE_DIR}")
+    list(APPEND CUDA_NVCC_FLAGS "--keep --keep-dir ${CUDA_NVCC_INTERMEDIATE_DIR}")
+  endif()
+
+  cuda_compile(cuda_objcs ${ARGN})
+
+  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+    set(${var} "${${var}_backup_in_cuda_compile_}")
+    unset(${var}_backup_in_cuda_compile_)
+  endforeach()
+
+  set(${objlist_variable} ${cuda_objcs})
+endmacro()
+
+################################################################################################
 # Config cuda compilation.
 # Usage:
 #   dgl_config_cuda(<dgl_cuda_src>)
@@ -235,7 +292,7 @@ macro(dgl_config_cuda out_variable)
   set(CUDA_PROPAGATE_HOST_FLAGS OFF)
 
   # 0. Add host flags
-  message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+  message(STATUS "${CMAKE_CXX_FLAGS}")
   string(REGEX REPLACE "[ \t\n\r]" "," CXX_HOST_FLAGS "${CMAKE_CXX_FLAGS}")
   if(MSVC AND NOT USE_MSVC_MT)
     string(CONCAT CXX_HOST_FLAGS ${CXX_HOST_FLAGS} ",/MD")
@@ -247,9 +304,16 @@ macro(dgl_config_cuda out_variable)
   list(APPEND CUDA_NVCC_FLAGS ${NVCC_FLAGS_ARCH})
 
   # 2. flags in third_party/moderngpu
-  list(APPEND CUDA_NVCC_FLAGS "--expt-extended-lambda;-Wno-deprecated-declarations;-std=c++17")
+  list(APPEND CUDA_NVCC_FLAGS "--expt-extended-lambda;-Wno-deprecated-declarations")
 
-  message(STATUS "CUDA_NVCC_FLAGS: ${CUDA_NVCC_FLAGS}")
+
+  # 3. CUDA 11 requires c++17 by default
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-std=c++17"    SUPPORT_CXX17)
+  string(REPLACE "-std=c++11" "" CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}")
+  list(APPEND CUDA_NVCC_FLAGS "-std=c++17")
+
+  message(STATUS "CUDA flags: ${CUDA_NVCC_FLAGS}")
 
   list(APPEND DGL_LINKER_LIBS
     ${CUDA_CUDART_LIBRARY}

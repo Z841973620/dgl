@@ -12,13 +12,12 @@ from ... import ndarray as nd
 from ...function.base import TargetCode
 from ...utils import version
 
-if version.parse(th.__version__) < version.parse("1.13.0"):
-    raise RuntimeError("DGL requires PyTorch >= 1.13.0")
+if version.parse(th.__version__) < version.parse("1.12.0"):
+    raise RuntimeError("DGL requires PyTorch >= 1.12.0")
 
 
 def data_type_dict():
     return {
-        "bfloat16": th.bfloat16,
         "float16": th.float16,
         "float32": th.float32,
         "float64": th.float64,
@@ -452,13 +451,11 @@ else:
 
 
 def zerocopy_to_dgl_ndarray_for_write(input):
-    if input.numel() > 0:
-        # only check non-empty tensors
-        assert input.is_contiguous(), (
-            "Cannot convert non-contiguous tensors "
-            "to dgl ndarray for write. Call .to_contiguous() first."
-        )
-        check_is_view(input)
+    assert input.is_contiguous(), (
+        "Cannot convert non-contiguous tensors "
+        "to dgl ndarray for write. Call .to_contiguous() first."
+    )
+    check_is_view(input)
     return zerocopy_to_dgl_ndarray(input)
 
 

@@ -100,7 +100,3 @@ def dot(a, b):
 
 def abs(a):
     return nd.abs(a)
-
-
-def seed(a):
-    return mx.random.seed(a)

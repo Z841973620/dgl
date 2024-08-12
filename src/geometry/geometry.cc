@@ -5,7 +5,6 @@
  */
 #include <dgl/array.h>
 #include <dgl/base_heterograph.h>
-#include <dgl/packed_func_ext.h>
 #include <dgl/runtime/ndarray.h>
 
 #include "../array/check.h"

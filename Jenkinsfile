@@ -1,41 +1,11 @@
 #!/usr/bin/env groovy
 
-// CI tests are executed within Docker containers as the 'root' user. However,
-// communications between Jenkins nodes are done with the 'ubuntu' user(login
-// via root is disallowed on AWS EC2 instances). Therefore, we need to change
-// the file permission to allow 'ubuntu' user to access the files created by
-// the 'root' user. This is achieved by running 'chmod -R 777 .'.
-
-// Summary of Jenkins nodes:
-// - linux-benchmark-node: Linux CPU node for authentication and lint check.
-//      number of nodes: 1
-//      instance type: m5.2xlarge(8 vCPUs, 32 GB memory)
-//      number of executors per node: 6
-//      number of jobs running on this node per CI run: 3
-// - dgl-ci-linux-cpu: Linux CPU node for building and testing.
-//      number of nodes: 4
-//      instance type: m6i.24xlarge(96 vCPUs, 384 GB memory)
-//      number of executors per node: 6
-//      number of jobs running on this node per CI run: 8
-// - dgl-ci-linux-gpu: Linux GPU node for building and testing.
-//      number of nodes: 4
-//      instance type: g4dn.4xlarge(16 vCPUs, 64 GB memory, 1 GPU)
-//      number of executors per node: 1
-//      number of jobs running on this node per CI run: 4
-// - dgl-ci-windows-cpu: Windows CPU node for building and testing.
-//      number of nodes: 4
-//      instance type: m6i.8xlarge(32 vCPUs, 128 GB memory)
-//      number of executors per node: 2
-//      number of jobs running on this node per CI run: 3
-
-dgl_linux_libs = 'build/libdgl.so, build/runUnitTests, python/dgl/_ffi/_cy3/core.cpython-*-x86_64-linux-gnu.so, build/tensoradapter/pytorch/*.so, build/dgl_sparse/*.so, build/graphbolt/*.so'
+dgl_linux_libs = 'build/libdgl.so, build/runUnitTests, python/dgl/_ffi/_cy3/core.cpython-*-x86_64-linux-gnu.so, build/tensoradapter/pytorch/*.so, build/dgl_sparse/*.so'
 // Currently DGL on Windows is not working with Cython yet
-dgl_win64_libs = "build\\dgl.dll, build\\runUnitTests.exe, build\\tensoradapter\\pytorch\\*.dll, build\\dgl_sparse\\*.dll, build\\graphbolt\\*.dll"
+dgl_win64_libs = "build\\dgl.dll, build\\runUnitTests.exe, build\\tensoradapter\\pytorch\\*.dll, build\\dgl_sparse\\*.dll"
 
 def init_git() {
-  sh "chmod -R 777 ." // Fix permission issue
   sh 'rm -rf *'
-  sh "git config --global --add safe.directory '*'"
   checkout scm
   sh 'git submodule update --recursive --init'
 }
@@ -87,7 +57,7 @@ def cpp_unit_test_win64() {
 def unit_test_linux(backend, dev) {
   init_git()
   unpack_lib("dgl-${dev}-linux", dgl_linux_libs)
-  timeout(time: 40, unit: 'MINUTES') {
+  timeout(time: 30, unit: 'MINUTES') {
     sh "bash tests/scripts/task_unit_test.sh ${backend} ${dev}"
   }
 }
@@ -111,7 +81,7 @@ def unit_test_cugraph(backend, dev) {
 def unit_test_win64(backend, dev) {
   init_git_win64()
   unpack_lib("dgl-${dev}-win64", dgl_win64_libs)
-  timeout(time: 50, unit: 'MINUTES') {
+  timeout(time: 30, unit: 'MINUTES') {
     bat "CALL tests\\scripts\\task_unit_test.bat ${backend}"
   }
 }
@@ -157,11 +127,11 @@ def is_authorized(name) {
     'rudongyu', 'classicsong', 'HuXiangkun', 'hetong007', 'kylasa',
     'frozenbugs', 'peizhou001', 'zheng-da', 'czkkkkkk', 'thvasilo',
     // Intern:
-    'keli-wen', 'caojy1998', 'RamonZhou', 'xiangyuzhi', 'Skeleton003', 'yxy235',
+    'keli-wen', 'caojy1998',
     // Friends:
     'nv-dlasalle', 'yaox12', 'chang-l', 'Kh4L', 'VibhuJawa', 'kkranen',
     'bgawrych', 'itaraban', 'daniil-sizov', 'anko-intel', 'Kacper-Pietkun',
-    'hankaj', 'agrabows', 'DominikaJedynak', 'RafLit', 'mfbalin',
+    'hankaj', 'agrabows', 'DominikaJedynak', 'RafLit',
     // Emeritus:
     'VoVAllen',
   ]
@@ -316,8 +286,8 @@ pipeline {
             stage('CPU Build') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v231103_1700"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
                   args "-u root"
                   alwaysPull true
                 }
@@ -327,7 +297,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -335,8 +304,8 @@ pipeline {
             stage('GPU Build') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-gpu:cu116_v231103_1700"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-gpu:cu102_v230606"
                   args "-u root"
                   alwaysPull true
                 }
@@ -347,7 +316,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -355,7 +323,7 @@ pipeline {
             stage('PyTorch Cugraph GPU Build') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
+                  label "linux-cpu-node"
                   image "rapidsai/cugraph_stable_torch-cuda:11.8-base-ubuntu20.04-py3.10-pytorch2.0.0-rapids23.04"
                   args "-u root"
                   alwaysPull true
@@ -366,13 +334,14 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
             }
             stage('CPU Build (Win64)') {
-              agent { label 'dgl-ci-windows-cpu' }
+              // Windows build machines are manually added to Jenkins master with
+              // "windows" label as permanent agents.
+              agent { label 'windows' }
               steps {
                 build_dgl_win64('cpu')
               }
@@ -390,9 +359,8 @@ pipeline {
             stage('C++ CPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v231103_1700"
-                  args "-u root"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
                   alwaysPull true
                 }
               }
@@ -401,7 +369,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -409,9 +376,9 @@ pipeline {
             stage('C++ GPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-gpu"
-                  image "dgllib/dgl-ci-gpu:cu116_v231103_1700"
-                  args "-u root --runtime nvidia"
+                  label "linux-gpu-node"
+                  image "dgllib/dgl-ci-gpu:cu102_v230606"
+                  args "--runtime nvidia"
                   alwaysPull true
                 }
               }
@@ -420,13 +387,12 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
             }
             stage('C++ CPU (Win64)') {
-              agent { label 'dgl-ci-windows-cpu' }
+              agent { label 'windows' }
               steps {
                 cpp_unit_test_win64()
               }
@@ -439,9 +405,8 @@ pipeline {
             stage('Tensorflow CPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v230810"
-                  args "-u root"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
                   alwaysPull true
                 }
               }
@@ -454,7 +419,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -462,9 +426,9 @@ pipeline {
             stage('Tensorflow GPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-gpu"
-                  image "dgllib/dgl-ci-gpu:cu116_v231103_1700"
-                  args "-u root --runtime nvidia"
+                  label "linux-gpu-node"
+                  image "dgllib/dgl-ci-gpu:cu101_v230210"
+                  args "--runtime nvidia"
                   alwaysPull true
                 }
               }
@@ -473,13 +437,10 @@ pipeline {
                   steps {
                     unit_test_linux('tensorflow', 'gpu')
                   }
-                  // Tensorflow does not support cuda 11.6 yet.
-                  when { expression { false } }
                 }
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -487,9 +448,9 @@ pipeline {
             stage('Torch CPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v231103_1700"
-                  args "-u root --shm-size=4gb"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
+                  args "--shm-size=4gb"
                   alwaysPull true
                 }
               }
@@ -512,13 +473,12 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
             }
             stage('Torch CPU (Win64)') {
-              agent { label 'dgl-ci-windows-cpu' }
+              agent { label 'windows' }
               stages {
                 stage('Torch CPU (Win64) Unit test') {
                   steps {
@@ -540,9 +500,9 @@ pipeline {
             stage('Torch GPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-gpu"
-                  image "dgllib/dgl-ci-gpu:cu116_v231103_1700"
-                  args "-u root --runtime nvidia --shm-size=8gb"
+                  label "linux-gpu-node"
+                  image "dgllib/dgl-ci-gpu:cu102_v230606"
+                  args "--runtime nvidia --shm-size=8gb"
                   alwaysPull true
                 }
               }
@@ -561,7 +521,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -569,9 +528,9 @@ pipeline {
             stage('Distributed') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v231103_1700"
-                  args "-u root --shm-size=4gb"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
+                  args "--shm-size=4gb"
                   alwaysPull true
                 }
               }
@@ -584,7 +543,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -592,9 +550,9 @@ pipeline {
             stage('PyTorch Cugraph GPU') {
               agent {
                 docker {
-                  label "dgl-ci-linux-gpu"
+                  label "linux-gpu-node"
                   image "rapidsai/cugraph_stable_torch-cuda:11.8-base-ubuntu20.04-py3.10-pytorch2.0.0-rapids23.04"
-                  args "-u root --runtime nvidia --shm-size=8gb"
+                  args "--runtime nvidia --shm-size=8gb"
                   alwaysPull true
                 }
               }
@@ -608,7 +566,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -616,9 +573,8 @@ pipeline {
             stage('DGL-Go') {
               agent {
                 docker {
-                  label "dgl-ci-linux-cpu"
-                  image "dgllib/dgl-ci-cpu:v231103_1700"
-                  args "-u root"
+                  label "linux-cpu-node"
+                  image "dgllib/dgl-ci-cpu:v230606"
                   alwaysPull true
                 }
               }
@@ -631,7 +587,6 @@ pipeline {
               }
               post {
                 always {
-                  sh "chmod -R 777 ." // Fix permission issue
                   cleanWs disableDeferredWipeout: true, deleteDirs: true
                 }
               }
@@ -665,7 +620,7 @@ pipeline {
             }
           }
         }
-        node('dgl-ci-windows-cpu') {
+        node('windows') {
             bat(script: "rmvirtualenv ${BUILD_TAG}", returnStatus: true)
         }
       }
